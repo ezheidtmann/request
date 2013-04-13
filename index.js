@@ -732,6 +732,44 @@ Request.prototype.onResponse = function (response) {
 
         redirectTo = self.uri
         break
+
+      case 'NTLM,':
+      case 'NTLM':
+        // Prepare username for NTLM auth: "NTDomainName\NTUserName"
+        if (self._ntlm_user === undefined) {
+          var ntlm_domainuser = self._user.split('\\');
+          if (ntlm_domainuser.length == 1) {
+            self._ntlm_user = ntlm_domainuser[0];
+            self._ntlm_domain = '';
+          }
+          else {
+            self._ntlm_domain = ntlm_domainuser[0];
+            self._ntlm_user = ntlm_domainuser[1];
+          }
+        }
+
+        // If the www-authenticate header looks like "NTLM <base64-encoded-garbage>",
+        // this is a type 2 message in response to our previous type 1.
+        var ntlm_match = authHeader.match(/^NTLM (.+)$/);
+        if (ntlm_match[1] && ntlm_match[1].length) {
+          // Respond to type 2 with type 3
+          var ntlm_nonce = ntlm.decodeType2(Buffer(ntlm_match[1], 'base64'));
+          var ntlm_type3 = ntlm.encodeType3(self._ntlm_user, '', self._ntlm_domain, ntlm_nonce, self._pass);
+          self.setHeader('authorization', 'NTLM ' + ntlm_type3.toString('base64'));
+        }
+        else {
+          // Send original type 1.
+          var ntlm_type1 = ntlm.encodeType1('', '');
+          self.setHeader('authorization', 'NTLM ' + ntlm_type1.toString('base64'));
+        }
+
+        // We can't set _sentAuth here because then we'll never get the type2 back here.
+        // But if we dont' set _sentAuth then we'll never catch incorrect passwords.
+        // TODO: figure out how to manage connections appropriately
+        //self._sentAuth = true
+        redirectTo = self.uri
+
+        break
     }
   }
 
