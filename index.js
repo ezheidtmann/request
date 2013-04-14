@@ -735,6 +735,9 @@ Request.prototype.onResponse = function (response) {
 
       case 'NTLM,':
       case 'NTLM':
+        // FIXME: this will only work if we have a single-socket pool.
+        // Should we enforce this right here right now?
+
         // Prepare username for NTLM auth: "NTDomainName\NTUserName"
         if (self._ntlm_user === undefined) {
           var ntlm_domainuser = self._user.split('\\');
@@ -756,19 +759,22 @@ Request.prototype.onResponse = function (response) {
           var ntlm_nonce = ntlm.decodeType2(Buffer(ntlm_match[1], 'base64'));
           var ntlm_type3 = ntlm.encodeType3(self._ntlm_user, '', self._ntlm_domain, ntlm_nonce, self._pass);
           self.setHeader('authorization', 'NTLM ' + ntlm_type3.toString('base64'));
+
+          // This type 3 request MUST be on the same socket as the type 2 response.
+          // TODO: mark the new request to use self.response.socket, or
+          // enforce maxSockets = 1 in our agent.
+          //
+          // Now we've finally sent the actual auth headers.
+          self._sentAuth = true;
         }
         else {
           // Send original type 1.
           var ntlm_type1 = ntlm.encodeType1('', '');
           self.setHeader('authorization', 'NTLM ' + ntlm_type1.toString('base64'));
+          // We can't set _sentAuth here because then we'll never get the type2 back here.
         }
 
-        // We can't set _sentAuth here because then we'll never get the type2 back here.
-        // But if we dont' set _sentAuth then we'll never catch incorrect passwords.
-        // TODO: figure out how to manage connections appropriately
-        //self._sentAuth = true
         redirectTo = self.uri
-
         break
     }
   }
