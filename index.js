@@ -46,6 +46,10 @@ try {
   tls = require('tls')
 } catch (e) {}
 
+try {
+  ntlm = require('smbhash').ntlm;
+} catch (e) {}
+
 var debug
 if (/\brequest\b/.test(process.env.NODE_DEBUG)) {
   debug = function() {
@@ -754,7 +758,7 @@ Request.prototype.onResponse = function (response) {
         // If the www-authenticate header looks like "NTLM <base64-encoded-garbage>",
         // this is a type 2 message in response to our previous type 1.
         var ntlm_match = authHeader.match(/^NTLM (.+)$/);
-        if (ntlm_match[1] && ntlm_match[1].length) {
+        if (ntlm_match && ntlm_match[1] && ntlm_match[1].length) {
           // Respond to type 2 with type 3
           var ntlm_nonce = ntlm.decodeType2(Buffer(ntlm_match[1], 'base64'));
           var ntlm_type3 = ntlm.encodeType3(self._ntlm_user, '', self._ntlm_domain, ntlm_nonce, self._pass);
@@ -823,6 +827,11 @@ Request.prototype.onResponse = function (response) {
       delete self.headers.host
       delete self.headers['content-type']
       delete self.headers['content-length']
+
+      // NTLM: the persistent-auth header indicates that NTLM auth succeeded.
+      // We can't send more auth headers, or it will fail.
+      if (response.headers['persistent-auth'] && self.headers['authorization'])
+        delete self.headers['authorization']
     }
     self.init()
     return // Ignore the rest of the response
