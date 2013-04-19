@@ -737,6 +737,8 @@ Request.prototype.onResponse = function (response) {
         redirectTo = self.uri
         break
 
+      case 'Negotiate':
+      case 'Negotiate,':
       case 'NTLM,':
       case 'NTLM':
         // FIXME: this will only work if we have a single-socket pool.
@@ -829,9 +831,11 @@ Request.prototype.onResponse = function (response) {
       delete self.headers['content-length']
 
       // NTLM: the persistent-auth header indicates that NTLM auth succeeded.
-      // We can't send more auth headers, or it will fail.
-      if (response.headers['persistent-auth'] && self.headers['authorization'])
+      // We will only send more auth headers if we are challenged
+      if (response.headers['persistent-auth'] && self.headers['authorization']) {
         delete self.headers['authorization']
+        self._sentAuth = false
+      }
     }
     self.init()
     return // Ignore the rest of the response
